@@ -151,7 +151,7 @@ kubectl logs -n domain-operator-system domain-operator-controller-manager-5fdfcc
 
 _Note: replace the pod name with the one in your cluster_
 
-### 4 - Create a Domain resource
+### 5 - Create a Domain resource
 
 1. from the root of the project, run the following command to create a new Domain resource
 
