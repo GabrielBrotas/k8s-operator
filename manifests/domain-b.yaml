@@ -1,0 +1,6 @@
+apiVersion: domain.platform.com/v1alpha1
+kind: Domain
+metadata:
+  name: domain-b
+spec:
+  domainID: "domain-b"

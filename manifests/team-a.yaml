@@ -1,9 +1,0 @@
-apiVersion: platform.example.com/v1
-kind: Team
-metadata:
-  name: team-sample
-spec:
-  teamId: "alpha"
-  teamName: "Alpha Team"
-  k8sClusterName: "alpha-cluster"
-  artifactoryNamespace: "bookinfo"

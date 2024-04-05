@@ -8,7 +8,7 @@
 
 ## The role and behavior of Kubernetes Operators
 
-A Kubernetes Operator manages your application's logistics. It contains code called a controller that runs periodically and checks the current state of your service's namespaced resources against the desired state. If the controller finds any differences, it restores your service to the desired state in a process called reconciliation. For instance, if a resource crashed, the controller restarts it.
+A Kubernetes Operator manages your application's logistics. It contains code called a **controller** that runs periodically and checks the _current state_ of your service's namespaced resources against the _desired state_. If the controller finds any differences, it restores your service to the desired state in a process called reconciliation. For instance, if a resource crashed, the controller restarts it.
 
 You can imagine an unofficial agreement between you and the Kubernetes Operator:
 
@@ -17,50 +17,169 @@ You can imagine an unofficial agreement between you and the Kubernetes Operator:
 
 You can build an operator with Helm Charts, Ansible playbooks, or Golang. In this article, we use Golang. We'll focus on a namespace-scoped operator (as opposed to a cluster-scoped operator) because it's more flexible and because we want to control only our own application. See the Kubernetes Operators 101 series for more background on operators.
 
-## Getting Started
+## Operator Overview
+
+for this project, we will create a Kubernetes Operator that manages a platform for domains. The operator will create a new management namespace for each domain hold the following information:
+
+- Domain ID
+- Environemnts
+
+Example of a `Domain`:
+
+```yaml
+apiVersion: domain.platform.com/v1
+kind: Domain
+metadata:
+  name: domain1
+spec:
+  domainID: domain1 # must be equal to the metadata name
+  environments:
+    - dev
+    - staging
+    - production
+```
+
+The Operator will:
+
+- Create a Management Namespace for each Domain
+- Store the Domain data in a database
+
+## How to Run
 
 ### 1 - Setting up a cluster on Minikube
+
+1. Start the cluster
 
 ```sh
 minikube start --kubernetes-version=v1.28.3
 ```
 
-### 2 - Setting up the Operator SDK
+2. Create the namespace for the operator
 
 ```sh
-cd my-operator
-
-go mod init my-operator.com
-operator-sdk init
-``` 
-### 3 - Create APIs and a custom resource
-
-In Kubernetes, the functions exposed for each service you want to provide are grouped together in a resource. Thus, when we create the APIs for our application, we also create their resource through a CustomResourceDefinition (CRD).
-
-The following command creates an API and labels it Traveller through the --kind option. In the YAML configuration files created by the command, you can find a field labeled kind with the value Traveller. This field indicates that Traveller is used throughout the development process to refer to our APIs:
-```sh
-$ operator-sdk create api --version=v1alpha1 --kind=Traveller
-
-Create Resource [y/n]
-y
-Create Controller [y/n]
-y
-...
-...
+kubectl create namespace domain-operator-system
 ```
 
-We have asked the command also to create a controller to handle all operations corresponding to our kind. The file defining the controller is named traveller_controller.go.
+### 2 - Create the Database Required for the Operator
 
-The --version option can take any string, and you can set it to track your development on a project. Here, we've started with a modest value, indicating that our application is in alpha.
+1. Deploy the database
 
-### 4 - Implement the controller
+```sh
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install -n domain-operator-system postgresql -f ./db/values.yaml bitnami/postgresql --create-namespace
+```
 
-### 5 - Build and run the operator
+The `db/values.yaml` contains the configuration for the database, including the password for the admin user and the init script to initialize the database tables.
+
+2. Verify the database is running
+
+```sh
+$ kubectl get pods -n domain-operator-system
+
+NAME           READY   STATUS    RESTARTS   AGE
+postgresql-0   1/1     Running   0          48s
+
+$ kubectl logs -n domain-operator-system postgresql-0
+...
+2024-04-05 18:31:12.858 GMT [1] LOG:  database system is ready to accept connections
+```
+
+### 3 - Build the Domain Operator
+
+1. Move to the operator directory to execute the `make` commands:
+
+```sh
+cd domain-operator
+```
+
+1. Build the Operator Docker image
+
+```sh
+make docker-build IMAGE_TAG_BASE=gbrotas/domain-operator VERSION=0.0.1
+```
+
+2. Push the image to the Docker Hub
+
+```sh
+make docker-push IMAGE_TAG_BASE=gbrotas/domain-operator VERSION=0.0.1
+```
+
+### 4 - Run the Operator
+
+There are three ways to run the operator:
+
+- As a Go program outside a cluster
+- As a Deployment inside a Kubernetes cluster
+- Managed by the Operator Lifecycle Manager (OLM) in bundle format
+
+In this project, we will run the operator as a Deployment inside a Kubernetes cluster.
+
+1. Install the CRDs into the cluster
 
 ```sh
 make install
-
-make run
 ```
 
-https://medium.com/developingnodes/mastering-kubernetes-operators-your-definitive-guide-to-starting-strong-70ff43579eb9# k8s-operator
+2. Deploy the operator to the cluster
+
+By default, a new namespace is created with name `<project-name>-system`, ex. `domain-operator-system`, and will be used for the deployment.
+
+Run the following to deploy the operator:
+
+```sh
+make deploy IMG=gbrotas/domain-operator:0.0.1
+```
+
+Verify that the memcached-operator is up and running:
+
+```sh
+$ kubectl get deployment -n domain-operator-system
+NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
+domain-operator-controller-manager   1/1     1            1           18m
+
+$ kubectl get pods -n domain-operator-system
+NAME                                                  READY   STATUS    RESTARTS   AGE
+domain-operator-controller-manager-5fdfcc86f6-p5bwh   2/2     Running   0          103s
+postgresql-0                                          1/1     Running   0          18m
+```
+
+You can follow the logs of the operator by running:
+
+```sh
+kubectl logs -n domain-operator-system domain-operator-controller-manager-5fdfcc86f6-p5bwh -c manager --follow
+```
+
+_Note: replace the pod name with the one in your cluster_
+
+### 4 - Create a Domain resource
+
+1. from the root of the project, run the following command to create a new Domain resource
+
+```sh
+$ kubectl apply -f manifests/domain-a.yaml
+domain.domain.platform.com/domain-a created
+```
+
+2. Verify that the Domain resource was created
+
+```sh
+$ kubectl get domain
+NAME       AGE
+domain-a   19s
+```
+
+When a domain is created, the operator will create a new namespace with the same name as the domain. Verify that the namespace was created:
+
+```sh
+$ kubectl get ns domain-a
+NAME       STATUS   AGE
+domain-a   Active   67s
+```
+
+Additionally, if you remove the Domain resource, the operator will delete the namespace created for the domain.
+
+## Refs:
+
+- https://betterprogramming.pub/build-a-kubernetes-operator-in-10-minutes-11eec1492d30
+- https://dev.to/eminetto/creating-kubernetes-operators-with-operator-sdk-49f9
+- https://medium.com/developingnodes/mastering-kubernetes-operators-your-definitive-guide-to-starting-strong-70ff43579eb9

@@ -1,0 +1,12 @@
+apiVersion: domain.platform.com/v1alpha1
+kind: Domain
+metadata:
+  labels:
+    app.kubernetes.io/name: domain
+    app.kubernetes.io/instance: domain-sample
+    app.kubernetes.io/part-of: domain-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: domain-operator
+  name: domain-sample
+spec:
+  # TODO(user): Add fields here

@@ -1,0 +1,25 @@
+global:
+  postgresql:
+    auth:
+      postgresPassword: "postgresqladmin"
+      username: "admin"
+      password: "admin"
+      database: "postgresqlDB"
+containerPorts:
+  postgresql: 5432
+image:
+  registry: docker.io
+  repository: bitnami/postgresql
+  tag: 15.4.0-debian-11-r10
+  digest: ""
+  pullPolicy: IfNotPresent
+  debug: false
+primary:
+  initdb:
+    scripts:
+      00_create_tables.sql: |
+        CREATE TABLE IF NOT EXISTS domains (
+          id SERIAL PRIMARY KEY,
+          domain_id VARCHAR(255) NOT NULL UNIQUE,
+          environments TEXT[]
+        );

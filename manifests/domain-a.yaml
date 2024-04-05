@@ -1,0 +1,9 @@
+apiVersion: domain.platform.com/v1alpha1
+kind: Domain
+metadata:
+  name: domain-a
+spec:
+  domainID: "domain-a"
+  environments:
+    - dev
+    - stage
